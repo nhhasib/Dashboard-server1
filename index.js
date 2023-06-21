@@ -43,24 +43,37 @@ async function run() {
     await client.connect();
     
     const usersCollection=client.db('Dashboard').collection('users')
-    const ittemsCollection=client.db('Dashboard').collection('items')
+    const itemsCollection=client.db('Dashboard').collection('items')
+    const ItemSelectedCollection=client.db('Dashboard').collection('itemselected')
+    const OrderedCollection=client.db('Dashboard').collection('orders')
 
     app.post('/jwt', (req,res) => {
       const user = req.body;
       const token = jwt.sign(user,process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h'});
       res.send({token})
     })
-    app.get("/allUsers", async (req, res) => {
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      if (user?.role!=='admin') {
+        return res.status(403).send({ error: true, message: 'forbidden message' });
+      }
+      next();
+    }
+
+    app.get("/allUsers",verifyJWT,verifyAdmin, async (req, res) => {
       const result =await usersCollection.find().toArray();
     res.send(result)
 })
 
-    app.get('/user',verifyJWT, async (req, res) => {
+    app.get('/users',verifyJWT, async (req, res) => {
       const email = req.query.email;
       if (!email) {
         res.send([])
       }
-          const decodedEmail = req.decoded.email;
+         const decodedEmail = req.decoded.email;
     if (email !== decodedEmail) {
       return res.status(403).send({ error: true, message: 'forbidden access' })
     }
@@ -79,7 +92,7 @@ async function run() {
       const result = await usersCollection.insertOne(data);
       res.send(result);
     });
-    app.patch('/users/admin/:id', async (req, res) => {
+    app.patch('/users/admin/:id',verifyJWT,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       console.log(id)
       const filter = { _id:new ObjectId(id) };
@@ -92,7 +105,7 @@ async function run() {
       const result = await usersCollection.updateOne(filter, updateDoc, options);
       res.send(result)
   })
-  app.patch('/users/doctor/:id', async (req, res) => {
+  app.patch('/users/doctor/:id',verifyJWT,verifyAdmin, async (req, res) => {
     const id = req.params.id;
     console.log(id)
     const filter = { _id:new ObjectId(id) };
@@ -106,7 +119,7 @@ async function run() {
     res.send(result)
   })
 
-  app.patch('/users/customer/:id', async (req, res) => {
+  app.patch('/users/customer/:id',verifyJWT,verifyAdmin, async (req, res) => {
     const id = req.params.id;
     console.log(id)
     const filter = { _id:new ObjectId(id) };
@@ -117,6 +130,104 @@ async function run() {
         },
     }
     const result = await usersCollection.updateOne(filter, updateDoc, options);
+    res.send(result)
+  })
+    app.get('/items',verifyJWT, async (req, res) => {
+      const result = await itemsCollection.find().toArray();
+      res.send(result)
+    })
+
+    app.get('/myItems',verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+          res.send([])
+      }
+      const decodedEmail = req.decoded.email;
+  if (email !== decodedEmail) {
+    return res.status(403).send({ error: true, message: 'forbidden access' })
+  }
+
+  const query = { email: email };
+  const result = await itemsCollection.find(query).toArray();
+  res.send(result);
+  })
+    
+  app.delete('/myItems/:id', async(req, res)=> {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await itemsCollection.deleteOne(query);
+      res.send(result)
+  })    
+
+    app.post('/items',verifyJWT, async (req, res) => {
+      const data = req.body;
+      const result = await itemsCollection.insertOne(data);
+      res.send(result)
+    })
+    app.patch('/items/approve/:id',verifyJWT,verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+           status:'approved'
+        },
+    }
+      const result = await itemsCollection.updateOne(query, updateDoc)
+      res.send(result)
+    })
+
+    app.patch('/items/denied/:id',verifyJWT,verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+           status:'denied'
+        },
+    }
+      const result = await itemsCollection.updateOne(query, updateDoc)
+      res.send(result)
+    })
+
+    
+    app.post('/items/ordered',verifyJWT, async (req, res) => {
+      const data = req.body;
+      const result = await OrderedCollection.insertOne(data);
+      res.send(result)
+    })
+    app.get('/items/ordered',verifyJWT, async(req,res)=> {
+      const email = req.query.email;
+      if (!email) {
+        res.send([])
+      }
+      const query = { email: email };
+    const result = await OrderedCollection.find(query).toArray();
+    res.send(result);
+    })
+
+    app.get('/selectedItems',verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+          res.send([])
+      }
+      const decodedEmail = req.decoded.email;
+  if (email !== decodedEmail) {
+    return res.status(403).send({ error: true, message: 'forbidden access' })
+  }
+  const query = { email: email };
+  const result = await ItemSelectedCollection.find(query).toArray();
+  res.send(result);
+  })
+  
+  app.post('/selectedItems',verifyJWT, async (req, res) => {
+    const data = req.body;
+    const result = await ItemSelectedCollection.insertOne(data);
+    res.send(result)
+  })
+    
+  app.delete('/selectedItems/:id',verifyJWT, async(req, res)=> {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await ItemSelectedCollection.deleteOne(query);
     res.send(result)
 })
 
